@@ -25,11 +25,7 @@ export default async function handler(
     return res.status(400).json({ error: 'Missing fields' });
   }
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_URL ||
-    process.env.VERCEL_URL ||
-    req.headers.origin ||
-    'http://localhost:3000';
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || req.headers.origin;
 
   try {
     const delayInSeconds = Math.floor(delayMs / 1000);
