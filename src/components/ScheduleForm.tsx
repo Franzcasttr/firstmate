@@ -48,9 +48,9 @@ const SchedulerForm = () => {
     return `Send in ${form.delay} ${form.unit}`;
   };
 
-  const isFormValid = () => {
-    return form.delay && form.message && form.webhookUrl;
-  };
+  // const isFormValid = () => {
+  //   return form.delay && form.message && form.webhookUrl;
+  // };
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault();
