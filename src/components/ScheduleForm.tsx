@@ -1,24 +1,18 @@
 'use client';
 
-// import { toast } from 'react-toastify';
-// import { SubmitButton } from './SubmitButton';
-// import { useFormState } from 'react-dom';
-// import { useEffect } from 'react';
-// import { useRouter } from 'next/navigation';
-import { RiCalendarScheduleLine } from 'react-icons/ri';
-import { SubmitButton } from './SubmitButton';
 import { useState } from 'react';
-// import { scheduleEmail } from '../../../actions/user/scheduler';
 
 const SchedulerForm = () => {
+  const [status, setStatus] = useState('');
   const [form, setForm] = useState({
-    to: '',
-    subject: '',
+    delay: '',
+    unit: 'seconds',
+    webhookUrl: '',
     message: '',
-    schedule: '',
   });
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(null);
+
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleChange = (e: { target: { name: string; value: string } }) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -26,58 +20,85 @@ const SchedulerForm = () => {
 
   const handleResetForm = () => {
     setForm({
-      to: '',
-      subject: '',
+      delay: '',
+      unit: 'seconds',
+      webhookUrl: '',
       message: '',
-      schedule: '',
     });
+  };
+
+  const getDelayInMs = () => {
+    const delayNum = parseInt(form.delay);
+    if (isNaN(delayNum)) return 0;
+
+    switch (form.unit) {
+      case 'seconds':
+        return delayNum * 1000;
+      case 'minutes':
+        return delayNum * 60 * 1000;
+      case 'hours':
+        return delayNum * 60 * 60 * 1000;
+      default:
+        return delayNum * 60 * 1000;
+    }
+  };
+
+  const getButtonText = () => {
+    if (!form.delay || form.delay === '0') return 'Send';
+    return `Send in ${form.delay} ${form.unit}`;
+  };
+
+  const isFormValid = () => {
+    return form.delay && form.message && form.webhookUrl;
   };
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    setLoading(true);
-    const res = await fetch('/api/schedule-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    });
-    const data = await res.json();
-    setLoading(false);
-    setSuccess(data.scheduled);
-  };
-  //   const [state, submitAction] = useFormState(scheduleEmail, null);
-  //   const router = useRouter();
+    if (
+      !form.delay ||
+      form.delay === '0' ||
+      !form.message ||
+      !form.webhookUrl
+    ) {
+      setErrorMessage('Please fill out all fields');
+      return;
+    }
 
-  //   useEffect(() => {
-  //     if (state?.status !== 200) {
-  //       toast.error(state?.message, {
-  //         position: 'top-right',
-  //         autoClose: 1800,
-  //         hideProgressBar: false,
-  //         closeOnClick: true,
-  //         pauseOnHover: true,
-  //         draggable: true,
-  //         progress: undefined,
-  //         onClose: () => {
-  //           document.getElementById('subscribeForm').reset();
-  //         },
-  //       });
-  //     } else if (state?.status === 200) {
-  //       toast.success(state?.message, {
-  //         position: 'top-right',
-  //         autoClose: 1800,
-  //         hideProgressBar: false,
-  //         closeOnClick: true,
-  //         pauseOnHover: true,
-  //         draggable: true,
-  //         progress: undefined,
-  //         onClose: () => {
-  //           document.getElementById('subscribeForm').reset();
-  //           router.replace('/login');
-  //         },
-  //       });
-  //     }
-  //   }, [router, state]);
+    // if (!isFormValid()) return;
+    const delayMs = getDelayInMs();
+    setLoading(true);
+    setStatus(`Scheduling message to be sent in ${form.delay} ${form.unit}...`);
+    try {
+      const res = await fetch('/api/schedule-message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          webhookUrl: form.webhookUrl,
+          message: `From Francis's Slack Bot: ${form.message}`,
+          delayMs,
+        }),
+      });
+      if (res.ok) {
+        handleResetForm();
+        const data = await res.json();
+        setLoading(false);
+        setStatus(data.message);
+      } else {
+        const error = await res.text();
+        setLoading(false);
+        setStatus(error);
+      }
+    } catch (error) {
+      console.log(error);
+      if (error instanceof Error) {
+        console.error('Error:', error.message);
+        setErrorMessage(`Error: ${error.message}`);
+      }
+      setLoading(false);
+    }
+  };
 
   return (
     <>
@@ -86,21 +107,24 @@ const SchedulerForm = () => {
           <div className='min-w-full'>
             <form
               //   action={submitAction}
-              onSubmit={handleSubmit}
+              // onSubmit={handleSubmit}
               className='space-y-3'
               id='subscribeForm'>
               <div>
                 <label
-                  htmlFor='email'
+                  htmlFor='delay'
                   className='block text-sm font-medium leading-6 text-gray-900'>
-                  Email To
+                  Enter Delay
                 </label>
                 <div className='mt-2'>
                   <input
-                    type='email'
-                    name='to'
-                    value={form.to}
+                    type='number'
+                    name='delay'
+                    value={form.delay}
                     onChange={handleChange}
+                    id='delay'
+                    min='0'
+                    placeholder='Enter delay amount'
                     required
                     className='block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 p-2 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:opacity-50'
                   />
@@ -108,16 +132,36 @@ const SchedulerForm = () => {
               </div>
               <div>
                 <label
-                  htmlFor='titleOfMail'
+                  htmlFor='unit'
+                  className='block mb-2 text-sm font-medium text-gray-900 '>
+                  Select an unit
+                </label>
+                <select
+                  name='unit'
+                  value={form.unit}
+                  onChange={handleChange}
+                  id='unit'
+                  className='bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 '>
+                  <option value='seconds'>Seconds</option>
+                  <option value='minutes'>Minutes</option>
+                  <option value='hours'>Hours</option>
+                </select>
+              </div>
+              <div>
+                <label
+                  htmlFor='webhookUrl'
                   className='block text-sm font-medium leading-6 text-gray-900'>
-                  Subject
+                  Enter Webhook URL
                 </label>
                 <div className='mt-2'>
                   <input
                     type='text'
-                    name='subject'
-                    value={form.subject}
+                    name='webhookUrl'
+                    value={form.webhookUrl}
                     onChange={handleChange}
+                    id='webhookUrl'
+                    min='0'
+                    placeholder='https://hooks.slack.com/services/...'
                     required
                     className='block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 p-2 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:opacity-50'
                   />
@@ -140,37 +184,39 @@ const SchedulerForm = () => {
                   />
                 </div>
               </div>
-              <div>
-                <label
-                  htmlFor='date'
-                  className='block text-sm font-medium leading-6 text-gray-900'>
-                  Select Date
-                </label>
-                <div className='mt-2'>
-                  <input
-                    id='date'
-                    name='schedule'
-                    type='datetime-local'
-                    value={form.schedule}
-                    onChange={handleChange}
-                    required
-                    min={getMinDateTime()}
-                    className='block w-fit rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 p-2 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:opacity-50 max-sm:w-full'
-                  />
-                </div>
-              </div>
-              {success && (
+
+              {/* {success && (
                 <p className='mt-4 text-green-600 text-center font-semibold'>
                   Email scheduled successfully!
                 </p>
+              )} */}
+              {status ? (
+                <div className='mt-4  text-green-600 text-center font-semibold'>
+                  {status}
+                </div>
+              ) : (
+                errorMessage && (
+                  <p className='mt-4 text-red-600 text-center font-semibold'>
+                    {errorMessage}
+                  </p>
+                )
               )}
               <div className='flex max-sm:flex-col max-sm:gap-y-2 sm:flex-row justify-between'>
-                <SubmitButton
-                  title='Schedule'
-                  size='fit'
-                  Icon={RiCalendarScheduleLine}
-                  isLoading={loading}
-                />
+                <button
+                  type='button'
+                  onClick={handleSubmit}
+                  className='flex justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 w-fit'
+                  disabled={loading}>
+                  {getButtonText()}
+                  <div
+                    className={` ${
+                      loading === true
+                        ? 'flex justify-center items-center'
+                        : 'hidden'
+                    }  `}>
+                    <div className='animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-white'></div>
+                  </div>
+                </button>
                 <button
                   type='reset'
                   onClick={handleResetForm}
@@ -187,16 +233,3 @@ const SchedulerForm = () => {
 };
 
 export default SchedulerForm;
-
-const getMinDateTime = () => {
-  const now = new Date();
-  now.setHours(now.getHours() + 24);
-
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-};
