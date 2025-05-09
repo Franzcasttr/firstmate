@@ -10,8 +10,6 @@ export const config = {
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // const { rawBody } = req as unknown as { rawBody: string };
-
     const { to, subject, message } = req.body;
     const transporter = nodemailer.createTransport({
       service: process.env.SMTP_HOST,
